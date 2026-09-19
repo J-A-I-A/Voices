@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1600" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Caribbean coastline illustration">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a3d36"/>
+      <stop offset="45%" stop-color="#0f6b53"/>
+      <stop offset="75%" stop-color="#1f8f7a"/>
+      <stop offset="100%" stop-color="#36b59a"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f8f7a"/>
+      <stop offset="100%" stop-color="#0a3d36"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="50%" cy="22%" r="38%">
+      <stop offset="0%" stop-color="#fde68a" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#fbbf24" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1400" height="1600" fill="url(#sky)"/>
+  <circle cx="700" cy="360" r="520" fill="url(#sun)"/>
+  <circle cx="700" cy="360" r="150" fill="#fde68a" opacity="0.9"/>
+  <!-- distant land -->
+  <path d="M0,860 Q180,790 360,830 T720,820 Q920,790 1120,830 T1400,820 L1400,900 L0,900 Z" fill="#0a3d36" opacity="0.55"/>
+  <!-- sea -->
+  <rect y="900" width="1400" height="700" fill="url(#sea)"/>
+  <!-- waves -->
+  <g fill="none" stroke="#cdefe6" stroke-opacity="0.18" stroke-width="4">
+    <path d="M0,1040 Q175,1010 350,1040 T700,1040 T1050,1040 T1400,1040"/>
+    <path d="M0,1140 Q175,1110 350,1140 T700,1140 T1050,1140 T1400,1140"/>
+    <path d="M0,1250 Q175,1220 350,1250 T700,1250 T1050,1250 T1400,1250"/>
+    <path d="M0,1370 Q175,1340 350,1370 T700,1370 T1050,1370 T1400,1370"/>
+  </g>
+  <!-- foreground palms silhouette -->
+  <g fill="#06251f" opacity="0.92">
+    <path d="M1180,1390 C1170,1200 1200,1040 1240,980 C1210,1060 1208,1240 1220,1390 Z"/>
+    <path d="M1240,980 C1300,920 1180,860 1100,890 C1200,880 1262,942 1240,980 Z"/>
+    <path d="M1240,980 C1305,1010 1340,970 1335,905 C1340,975 1290,1005 1240,980 Z"/>
+  </g>
+</svg>

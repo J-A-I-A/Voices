@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-carib}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caribvoices}
+      POSTGRES_DB: ${POSTGRES_DB:-caribvoices}
+    ports:
+      - "5432:5432"
+    volumes:
+      - carib-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carib} -d ${POSTGRES_DB:-caribvoices}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000}
+    ports:
+      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-carib}:${POSTGRES_PASSWORD:-caribvoices}@db:5432/${POSTGRES_DB:-caribvoices}
+      REDIS_URL: redis://redis:6379/0
+
+  worker:
+    build: ./backend
+    command: python -m app.worker_main
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-carib}:${POSTGRES_PASSWORD:-caribvoices}@db:5432/${POSTGRES_DB:-caribvoices}
+      REDIS_URL: redis://redis:6379/0
+      # This service is the QC worker; don't also run the in-process worker.
+      CARIB_DISABLE_INPROC_QC: "1"
+
+  portal:
+    build: ./portal
+    command: npm run dev -- -H 0.0.0.0 -p 3000
+    ports:
+      - "3000:3000"
+    env_file: ./portal/.env.local
+    depends_on:
+      - backend
+    volumes:
+      - ./portal:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+
+volumes:
+  carib-db:
