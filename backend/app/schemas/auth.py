@@ -21,11 +21,14 @@ class GoogleAuthRequest(BaseModel):
     """Submitted by the portal after Google sign-in returns an ID token.
 
     The portal sends Google's id_token; the backend verifies it and reads
-    given_name/family_name/email. date_of_birth is ALWAYS collected on the
-    portal's completion step and sent here (Google does not provide it).
+    given_name/family_name/email. Google never provides a date of birth, so
+    it is collected on the portal's completion step — but only the FIRST
+    time. `date_of_birth` is therefore optional: a returning user who already
+    has one on file signs straight in, and the backend answers
+    requires_completion when it genuinely still needs the details.
     """
     id_token: str = Field(..., min_length=10)
-    date_of_birth: _dt.date
+    date_of_birth: Optional[_dt.date] = None
     first_name: Optional[str] = Field(None, max_length=120)
     last_name: Optional[str] = Field(None, max_length=120)
 
@@ -49,6 +52,23 @@ class TokenResponse(BaseModel):
     requires_completion: bool = False
 
 
+class GoogleAuthResult(BaseModel):
+    """Either a completed sign-in, or a request for the missing details.
+
+    Kept field-compatible with TokenResponse on the success path so callers
+    can use it the same way; access_token/user are null only when
+    requires_completion is true.
+    """
+    requires_completion: bool = False
+    access_token: Optional[str] = None
+    token_type: Literal["bearer"] = "bearer"
+    user: Optional["UserOut"] = None
+    # Prefill for the completion step, from the Google profile.
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -60,6 +80,7 @@ class UserOut(BaseModel):
     whatsapp_number: Optional[str] = None
     whatsapp_verified: bool = False
     is_reviewer: bool = False
+    is_admin: bool = False
     requires_completion: bool = False  # True for Google users needing DOB completion
 
     @property

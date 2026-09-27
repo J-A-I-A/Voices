@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -12,7 +13,7 @@ from ..models.user import User, AuthProvider
 from ..schemas.auth import (
     RegisterEmailRequest, GoogleAuthRequest,
     LoginRequest, TokenResponse, UserOut, VerifyWhatsappRequest,
-    CheckOtpRequest, ResendOtpRequest, MeResponse,
+    CheckOtpRequest, ResendOtpRequest, MeResponse, GoogleAuthResult,
 )
 from ..security.age import is_at_least_18
 from ..security.deps import get_current_user, get_verified_user
@@ -21,8 +22,9 @@ from ..security.token import create_access_token
 from ..services.google import verify_id_token, GoogleTokenError, claims_to_names
 from ..services.otp import issue_otp, verify_code, OTPError, CooldownActive
 from ..services.rate_limit import hit_rate_limit
-from ..services.whatsapp import send_otp, agent_wame_link
+from ..services.whatsapp import send_otp, agent_wame_link, WhatsAppError
 
+logger = logging.getLogger("carib.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 WAME_STARTER = "Hi Carib Voices! Send me a phrase to read."
@@ -46,6 +48,7 @@ def _user_to_out(user: User) -> UserOut:
         whatsapp_number=user.whatsapp_number,
         whatsapp_verified=user.whatsapp_verified,
         is_reviewer=user.is_reviewer,
+        is_admin=user.is_admin,
         requires_completion=not bool(user.date_of_birth),
     )
 
@@ -58,9 +61,29 @@ def _token_for(user: User) -> TokenResponse:
     )
 
 
-def _mark_reviewer_if_configured(user: User) -> None:
-    if user.email.lower() in settings.reviewer_email_list:
+def _sync_configured_roles(user: User, db: Session | None = None) -> None:
+    """Apply REVIEWER_EMAILS / ADMIN_EMAILS to this account.
+
+    Called on login as well as registration: the original code only ran at
+    registration, so adding an address to the list had no effect on an account
+    that already existed — the flag could only be set with a manual UPDATE.
+    Roles granted in the admin UI are never revoked here; the lists only add.
+    """
+    changed = False
+    if user.email.lower() in settings.reviewer_email_list and not user.is_reviewer:
         user.is_reviewer = True
+        changed = True
+    if user.email.lower() in settings.admin_email_list and not user.is_admin:
+        user.is_admin = True
+        changed = True
+    if changed and db is not None:
+        db.commit()
+        logger.info("roles synced from config for %s (reviewer=%s admin=%s)",
+                    user.email, user.is_reviewer, user.is_admin)
+
+
+# Back-compat alias for existing call sites.
+_mark_reviewer_if_configured = _sync_configured_roles
 
 
 # ─── Email registration ─────────────────────────────────────
@@ -91,15 +114,27 @@ async def register_email(body: RegisterEmailRequest, request: Request, db: Sessi
 
 
 # ─── Google sign-in / sign-up ──────────────────────────────
-@router.post("/google", response_model=TokenResponse)
+def _google_result(user: User) -> GoogleAuthResult:
+    return GoogleAuthResult(
+        requires_completion=False,
+        access_token=create_access_token(user.id),
+        user=_user_to_out(user),
+    )
+
+
+@router.post("/google", response_model=GoogleAuthResult)
 async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = Depends(get_db)):
+    """Google sign-in and sign-up.
+
+    Google does not supply a date of birth, so the portal collects one on a
+    completion step. That step is only needed when we do not already hold the
+    details: a returning user signs straight in. Previously the portal routed
+    every Google sign-in through the completion form and the request schema
+    required a DOB, so returning users were asked for their name and date of
+    birth on every single sign-in.
+    """
     if hit_rate_limit(f"register:{request.client.host}", 10, 600):
         raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
-
-    # The portal always collects DOB on the Google completion step, so the
-    # request carries it. Validate the age gate server-side regardless.
-    if not is_at_least_18(body.date_of_birth):
-        raise _age_rejected()
 
     try:
         claims = await verify_id_token(body.id_token)
@@ -110,9 +145,17 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
     if not email:
         raise HTTPException(status_code=400, detail="Google token did not include an email.")
     google_sub = claims.get("sub")
+    given, family = claims_to_names(claims)
+
+    # The age gate is enforced server-side whenever a DOB is supplied.
+    if body.date_of_birth is not None and not is_at_least_18(body.date_of_birth):
+        raise _age_rejected()
 
     user = db.query(User).filter(User.email == email).first()
-    given, family = claims_to_names(claims)
+    if user is not None and user.deleted_at is not None:
+        # Deleted rows are scrubbed to a placeholder email, so this is a guard
+        # rather than a path users can normally reach.
+        user = None
 
     if user:
         if user.auth_provider != AuthProvider.google:
@@ -120,8 +163,25 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
                 status_code=409,
                 detail="This email is registered with a password. Please sign in with email + password.",
             )
+
+        # Returning user with everything on file: sign in, change nothing.
+        if body.date_of_birth is None:
+            if user.date_of_birth:
+                user.google_subject = google_sub
+                _sync_configured_roles(user)
+                db.commit()
+                db.refresh(user)
+                return _google_result(user)
+            # Account exists but has no DOB — ask for it, prefilling what we know.
+            return GoogleAuthResult(
+                requires_completion=True,
+                first_name=user.first_name or given,
+                last_name=user.last_name or family,
+                email=email,
+            )
+
+        # Completion step (or a deliberate update) supplied details.
         user.google_subject = google_sub
-        # Only persist Google-provided name fields when the claims/form actually provide them.
         if body.first_name:
             user.first_name = body.first_name.strip()
         elif given and not user.first_name:
@@ -131,10 +191,20 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
         elif family and not user.last_name:
             user.last_name = family
         user.date_of_birth = body.date_of_birth
-        _mark_reviewer_if_configured(user)
+        _sync_configured_roles(user)
         db.commit()
         db.refresh(user)
-        return _token_for(user)
+        return _google_result(user)
+
+    # New account: we must collect a DOB before creating anything, both for the
+    # 18+ gate and because the column is non-nullable.
+    if body.date_of_birth is None:
+        return GoogleAuthResult(
+            requires_completion=True,
+            first_name=given,
+            last_name=family,
+            email=email,
+        )
 
     user = User(
         first_name=(body.first_name or given or "").strip() or "User",
@@ -145,11 +215,11 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
         google_subject=google_sub,
         password_hash=None,
     )
-    _mark_reviewer_if_configured(user)
+    _sync_configured_roles(user)
     db.add(user)
     db.commit()
     db.refresh(user)
-    return _token_for(user)
+    return _google_result(user)
 
 
 # ─── Email login ────────────────────────────────────────────
@@ -158,10 +228,11 @@ async def login(body: LoginRequest, request: Request, db: Session = Depends(get_
     if hit_rate_limit(f"login:{request.client.host}", 15, 600):
         raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
     user = db.query(User).filter(User.email == body.email.lower()).first()
-    if not user or user.auth_provider != AuthProvider.email:
+    if not user or user.deleted_at is not None or user.auth_provider != AuthProvider.email:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     if not verify_password(body.password, user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+    _sync_configured_roles(user, db)
     return _token_for(user)
 
 
@@ -213,7 +284,16 @@ async def _send_otp(body, request, user, db):
     except CooldownActive as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
 
-    await send_otp(phone.lstrip("+"), code)
+    try:
+        await send_otp(phone.lstrip("+"), code)
+    except WhatsAppError as e:
+        # The code is already issued, so surface a real reason rather than a
+        # bare 500 — the Graph details are in the log line.
+        logger.error("OTP delivery to %s failed: %s", phone, e)
+        raise HTTPException(
+            status_code=502,
+            detail="We could not send the verification code over WhatsApp. Please try again shortly.",
+        ) from e
     return {"status": "sent", "phone": phone}
 
 

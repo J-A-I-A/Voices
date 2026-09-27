@@ -2,53 +2,307 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-  }
+/* ───────────────────────────────────────────────────────────────
+   JAIA brand tokens.
+
+   Sampled from jaia.org.jm and the Carib Voices logo: Jamaican
+   flag green and gold on warm paper, near-black ink, Poppins.
+   ─────────────────────────────────────────────────────────────── */
+:root {
+  --jaia-green: #009b3a;
+  --jaia-green-deep: #00752c;
+  --jaia-green-soft: #e8f5ec;
+  --jaia-gold: #ffb81c;
+  --jaia-gold-soft: #fff6e3;
+
+  --ink: #171717;
+  --ink-soft: #4a4a4a;
+  /* Darkened from #78736a, which measured 3.99:1 on the warm band and failed
+     WCAG AA for body text. This clears 5.1:1 against the worst-case surface. */
+  --ink-muted: #67625a;
+
+  --paper: #f6f4ef;
+  --paper-warm: #efece4;
+  --surface: #ffffff;
+  --line: #e4e0d6;
+
+  --radius: 0.75rem;
+
+  /* shadcn-compatible aliases, kept so tailwind.config.ts keeps working */
+  --background: 44 27% 95%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 9%;
+  --primary: 145 100% 30%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 40 20% 93%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 40 20% 93%;
+  --muted-foreground: 40 6% 45%;
+  --accent: 40 100% 55%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 42 21% 86%;
+  --input: 42 21% 86%;
+  --ring: 145 100% 30%;
 }
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
-/* Carib Voices accent: deep Caribbean green used on the auth brand. */
-.cv-brand {
-  background: linear-gradient(135deg, #0a3d36 0%, #0f6b53 100%);
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Poppins is geometric and reads tight; slightly negative tracking on
+   headings matches the JAIA site's display setting. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: var(--jaia-green);
+  color: #fff;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Shared surfaces.
+   ─────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Warm paper canvas with a soft top wash, used behind page headers. */
+  .cv-canvas {
+    background:
+      radial-gradient(120% 70% at 12% 0%, rgba(0, 155, 58, 0.10) 0%, transparent 55%),
+      radial-gradient(90% 60% at 88% 4%, rgba(255, 184, 28, 0.14) 0%, transparent 52%),
+      linear-gradient(180deg, var(--paper-warm) 0%, var(--paper) 62%);
+  }
+
+  /* Slow, very soft colour blooms. Far gentler than a dark aurora — on
+     light paper any movement reads as noise if it is too strong. */
+  .cv-bloom::before,
+  .cv-bloom::after {
+    content: "";
+    position: absolute;
+    inset: -25%;
+    pointer-events: none;
+    background: radial-gradient(closest-side, rgba(0, 155, 58, 0.12), transparent 70%);
+    filter: blur(50px);
+    animation: cv-drift 26s ease-in-out infinite alternate;
+  }
+  .cv-bloom::after {
+    background: radial-gradient(closest-side, rgba(255, 184, 28, 0.16), transparent 70%);
+    animation-duration: 34s;
+    animation-direction: alternate-reverse;
+  }
+
+  /* Faint warm grid, faded at the edges. */
+  .cv-grid {
+    background-image:
+      linear-gradient(to right, rgba(23, 23, 23, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(23, 23, 23, 0.045) 1px, transparent 1px);
+    background-size: 64px 64px;
+    -webkit-mask-image: radial-gradient(70% 60% at 50% 35%, black 25%, transparent 100%);
+            mask-image: radial-gradient(70% 60% at 50% 35%, black 25%, transparent 100%);
+  }
+
+  /* Green brand band — page headers, callouts. */
+  .cv-brand {
+    background: linear-gradient(135deg, var(--jaia-green) 0%, var(--jaia-green-deep) 100%);
+  }
+
+  /* Card. JAIA leans on generous radius and hairline warm borders
+     rather than heavy shadows. */
+  .cv-surface {
+    @apply rounded-2xl border bg-white;
+    border-color: var(--line);
+    box-shadow: 0 1px 2px rgba(23, 23, 23, 0.04);
+  }
+
+  /* Text roles. */
+  .cv-heading { color: var(--ink); }
+  .cv-body    { color: var(--ink-soft); }
+  .cv-muted   { color: var(--ink-muted); }
+
+  /* The JAIA micro-label: uppercase, tracked, small, bold. */
+  .cv-eyebrow {
+    @apply text-xs font-semibold uppercase;
+    letter-spacing: 0.16em;
+    color: var(--jaia-green);
+  }
+
+  /* Form control — pill, matching the site's rounded inputs. */
+  .cv-input {
+    @apply w-full rounded-full border bg-white px-5 py-3 text-sm;
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .cv-input::placeholder { color: #a8a299; }
+  .cv-input:focus {
+    outline: none;
+    border-color: var(--jaia-green);
+    box-shadow: 0 0 0 3px rgba(0, 155, 58, 0.15);
+  }
+  .cv-input-error {
+    border-color: #e11d48;
+  }
+  .cv-input-error:focus {
+    border-color: #e11d48;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+  }
+
+  /* Buttons — fully rounded, like every control on jaia.org.jm. */
+  .cv-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold
+           text-white transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100;
+    background: var(--jaia-green);
+  }
+  .cv-btn:hover:not(:disabled) { background: var(--jaia-green-deep); }
+
+  .cv-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border bg-white px-5 py-2.5
+           text-sm font-semibold transition disabled:opacity-40;
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .cv-btn-ghost:hover:not(:disabled) {
+    border-color: var(--jaia-green);
+    color: var(--jaia-green);
+  }
+
+  .cv-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold
+           text-white transition disabled:opacity-50;
+    background: #e11d48;
+  }
+  .cv-btn-danger:hover:not(:disabled) { background: #be123c; }
+
+  /* Uppercase tracked CTA, as used in the site's nav button. */
+  .cv-cta {
+    @apply uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .cv-alert {
+    @apply rounded-2xl border px-4 py-3 text-sm;
+    border-color: #f6c6cf;
+    background: #fef2f4;
+    color: #9f1239;
+  }
+
+  .cv-note {
+    @apply rounded-2xl border px-4 py-3 text-sm;
+    border-color: #bfe3cc;
+    background: var(--jaia-green-soft);
+    color: #06502a;
+  }
+
+  .cv-link {
+    @apply font-medium underline underline-offset-2 transition;
+    color: var(--jaia-green);
+    text-decoration-color: rgba(0, 155, 58, 0.35);
+  }
+  .cv-link:hover {
+    color: var(--jaia-green-deep);
+    text-decoration-color: var(--jaia-green);
+  }
+
+  /* Floating pill navigation, the site's signature header. */
+  .cv-navbar {
+    @apply rounded-full border bg-white;
+    border-color: var(--line);
+    box-shadow: 0 10px 30px rgba(23, 23, 23, 0.07);
+  }
+
+  .cv-navlink {
+    @apply relative text-xs font-semibold uppercase transition;
+    letter-spacing: 0.1em;
+    color: var(--ink);
+  }
+  .cv-navlink:hover { color: var(--jaia-green); }
+
+  /* Gold underline marks the active section, as on jaia.org.jm. */
+  .cv-navlink-active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.5rem;
+    height: 2px;
+    background: var(--jaia-gold);
+    border-radius: 2px;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Motion. Disabled wholesale under prefers-reduced-motion.
+   ─────────────────────────────────────────────────────────────── */
+@keyframes cv-drift {
+  from { transform: translate3d(-6%, -3%, 0) scale(1); }
+  to   { transform: translate3d(8%, 5%, 0) scale(1.12); }
+}
+
+/* Live waveform: each bar sets its own --cv-delay and height. */
+.cv-bar {
+  transform-origin: center;
+  animation: cv-pulse 1.5s ease-in-out infinite alternate;
+  animation-delay: var(--cv-delay, 0s);
+}
+
+@keyframes cv-pulse {
+  from { transform: scaleY(0.22); opacity: 0.5; }
+  to   { transform: scaleY(1);    opacity: 1; }
+}
+
+.cv-rise {
+  animation: cv-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--cv-delay, 0s);
+}
+
+@keyframes cv-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-bloom::before,
+  .cv-bloom::after,
+  .cv-bar,
+  .cv-rise {
+    animation: none;
+  }
+  .cv-bar { transform: scaleY(0.6); opacity: 0.9; }
+}
+
+
+/* Logo waveform: the bars flanking the wordmark, gently moving.
+   SVG needs transform-box: fill-box for transform-origin to mean the rect's
+   own centre rather than the viewBox origin. */
+.cv-logo-bar {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cv-logo-pulse 1.4s ease-in-out infinite alternate;
+  animation-delay: var(--cv-delay, 0s);
+}
+
+@keyframes cv-logo-pulse {
+  from { transform: scaleY(0.4); }
+  to   { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-logo-bar {
+    animation: none;
+    transform: scaleY(0.75);
+  }
+}
+
+/* Native controls follow the light theme. */
+:root {
+  color-scheme: light;
 }

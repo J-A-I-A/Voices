@@ -7,14 +7,14 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Status -> label + badge class for voice notes. */
 export const STATUS_META: Record<string, { label: string; className: string }> = {
-  received: { label: "Received", className: "bg-blue-100 text-blue-800 border-blue-200" },
-  accepted: { label: "Accepted", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  rejected: { label: "Rejected", className: "bg-rose-100 text-rose-800 border-rose-200" },
-  needs_review: { label: "Needs review", className: "bg-amber-100 text-amber-800 border-amber-200" },
+  received: { label: "Received", className: "bg-sky-50 text-sky-700 border-sky-200" },
+  accepted: { label: "Accepted", className: "bg-[color:var(--jaia-green-soft)] text-[#06502a] border-[color:var(--jaia-green)]/30" },
+  rejected: { label: "Rejected", className: "bg-rose-50 text-rose-700 border-rose-200" },
+  needs_review: { label: "Needs review", className: "bg-[color:var(--jaia-gold-soft)] text-[#8a5a00] border-[color:var(--jaia-gold)]/50" },
 };
 
 export function statusBadge(status: string) {
-  return STATUS_META[status] ?? { label: status, className: "bg-neutral-100 text-neutral-800 border-neutral-200" };
+  return STATUS_META[status] ?? { label: status, className: "bg-[color:var(--paper-warm)] text-[color:var(--ink-soft)] border-[color:var(--line)]" };
 }
 
 export function formatDate(iso?: string | null) {

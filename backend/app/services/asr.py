@@ -111,7 +111,7 @@ def _get_faster_whisper():
 def _faster_whisper_transcribe(audio_bytes: bytes, mime_type: str) -> str:
     """Transcribe with faster-whisper. Converts bytes to a wav via ffmpeg first."""
     import subprocess
-    with tempfile.NamedTemporaryFile(suffix=_ext_for(mime), delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=_ext_for(mime_type), delete=False) as f:
         f.write(audio_bytes)
         src = f.name
     wav = src + ".wav"

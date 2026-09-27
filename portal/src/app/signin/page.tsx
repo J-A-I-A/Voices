@@ -14,6 +14,7 @@ export default function SignInPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -31,13 +32,31 @@ export default function SignInPage() {
     }
   };
 
-  const onGoogle = async (idToken: string) => {
-    // Returning Google users: if DOB is already on file the backend finalizes
-    // immediately; otherwise the backend returns requires_completion and we
-    // route to the completion step. We send a placeholder DOB only here for
-    // known users; for safety, always via completion step for consistency.
-    sessionStorage.setItem("cv_google_id_token", idToken);
-    router.push("/complete-google");
+  /**
+   * Try to sign in with Google directly. Only if the backend says it still
+   * needs a date of birth (a genuinely new account) do we send the user to
+   * the completion step — previously every sign-in went through that form,
+   * so returning users were re-asked for their name and age each time.
+   */
+  const onGoogle = async (idToken: string, claims: { given_name?: string; family_name?: string }) => {
+    setGoogleBusy(true);
+    try {
+      const res = await authApi.google({ id_token: idToken });
+      if (!res.requires_completion && res.access_token && res.user) {
+        setToken(res.access_token);
+        setUser(res.user);
+        router.push("/dashboard");
+        return;
+      }
+      sessionStorage.setItem("cv_google_id_token", idToken);
+      sessionStorage.setItem("cv_google_given", res.first_name || claims.given_name || "");
+      sessionStorage.setItem("cv_google_family", res.last_name || claims.family_name || "");
+      router.push("/complete-google");
+    } catch (e) {
+      setErrors({ form: e instanceof ApiError ? e.message : "Google sign-in failed" });
+    } finally {
+      setGoogleBusy(false);
+    }
   };
 
   return (
@@ -46,12 +65,12 @@ export default function SignInPage() {
       subtitle="Sign in to your Carib Voices account."
       topExtra={<GoogleSignInButton label="Sign in with Google" onIdToken={onGoogle} />}
       divider
-      footer={<>Don&apos;t have an account? <a href="/register" className="font-semibold text-neutral-900 hover:underline">Sign up</a></>}
+      footer={<>Don&apos;t have an account? <a href="/register" className="font-semibold text-[color:var(--jaia-green)] transition hover:text-[color:var(--jaia-green)]">Sign up</a></>}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         {errors.form && (
           <MotionItem>
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{errors.form}</div>
+            <div className="cv-alert">{errors.form}</div>
           </MotionItem>
         )}
         <MotionItem>

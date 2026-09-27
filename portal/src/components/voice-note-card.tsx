@@ -6,39 +6,39 @@ export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
   const badge = statusBadge(note.status);
   const qc = note.qc;
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="cv-surface p-5 transition hover:border-[color:var(--jaia-green)]/40">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1.5 flex items-center gap-2">
             <span className={"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium " + badge.className}>
               {badge.label}
             </span>
-            <span className="text-xs text-neutral-400">{formatDate(note.created_at)}</span>
+            <span className="text-xs cv-muted">{formatDate(note.created_at)}</span>
             {note.duration_seconds != null && (
-              <span className="text-xs text-neutral-400">{note.duration_seconds}s</span>
+              <span className="text-xs cv-muted">{note.duration_seconds}s</span>
             )}
           </div>
-          <p className="text-sm text-neutral-900 font-medium line-clamp-2">
+          <p className="line-clamp-2 text-sm font-medium cv-heading">
             “{note.phrase_text || "Unassigned phrase"}”
           </p>
         </div>
         {note.audio_url && (
-          <audio controls preload="none" src={note.audio_url} className="h-9 w-full sm:w-64 shrink-0" />
+          <audio controls preload="none" src={note.audio_url} className="h-9 w-full shrink-0 sm:w-64" />
         )}
       </div>
 
       {note.status === "rejected" && note.reject_reason && (
-        <p className="mt-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+        <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           Rejected: {note.reject_reason}
         </p>
       )}
 
       {qc && (
-        <dl className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-[color:var(--line)] pt-4 text-xs sm:grid-cols-4">
           {qc.transcript != null && (
             <div className="col-span-2 sm:col-span-4">
-              <dt className="text-neutral-400">Transcript (ASR{qc.asr_model ? " · " + qc.asr_model : ""})</dt>
-              <dd className="text-neutral-700 mt-0.5">{qc.transcript || "—"}</dd>
+              <dt className="cv-muted">Transcript (ASR{qc.asr_model ? " · " + qc.asr_model : ""})</dt>
+              <dd className="mt-0.5 cv-body">{qc.transcript || "—"}</dd>
             </div>
           )}
           {qc.wer != null && (
@@ -49,8 +49,8 @@ export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
           {qc.loudness_dbfs != null && <Metric label="Loudness" value={qc.loudness_dbfs + " dBFS"} />}
           {qc.qc_reason && (
             <div className="col-span-2 sm:col-span-4">
-              <dt className="text-neutral-400">QC note</dt>
-              <dd className="text-neutral-600 mt-0.5">{qc.qc_reason}</dd>
+              <dt className="cv-muted">QC note</dt>
+              <dd className="mt-0.5 cv-body">{qc.qc_reason}</dd>
             </div>
           )}
         </dl>
@@ -62,8 +62,8 @@ export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div title={hint}>
-      <dt className="text-neutral-400">{label}</dt>
-      <dd className="text-neutral-700 mt-0.5 font-medium">{value}</dd>
+      <dt className="cv-muted">{label}</dt>
+      <dd className="mt-0.5 font-medium cv-heading">{value}</dd>
     </div>
   );
 }

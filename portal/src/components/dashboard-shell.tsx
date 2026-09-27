@@ -1,17 +1,23 @@
 "use client";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/logo";
+import { SiteFooter } from "@/components/site-footer";
 import { useAuth } from "@/lib/store";
 
 /**
- * DashboardShell — Watermelon-style app shell: top nav with brand, user menu,
- * verification banner, and content area. Guards auth: redirects to /signin
- * if there is no session.
+ * DashboardShell — app shell on the JAIA brand.
+ *
+ * Follows jaia.org.jm: warm paper canvas, a floating white pill navigation
+ * with uppercase tracked links and a gold underline on the active section,
+ * and a dark ink footer band. Guards auth: redirects to /signin with no session.
  */
-export function DashboardShell({ children, title, actions }: {
+export function DashboardShell({ children, title, actions, active }: {
   children: React.ReactNode;
   title: string;
   actions?: React.ReactNode;
+  /** Which nav item to mark with the gold underline. */
+  active?: "notes" | "review" | "admin" | "profile";
 }) {
   const router = useRouter();
   const { user, loading, bootstrap, logout } = useAuth();
@@ -20,7 +26,9 @@ export function DashboardShell({ children, title, actions }: {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-neutral-400">Loading…</div>
+      <div className="cv-canvas flex min-h-screen items-center justify-center cv-muted">
+        Loading…
+      </div>
     );
   }
   if (!user) {
@@ -28,39 +36,58 @@ export function DashboardShell({ children, title, actions }: {
     return null;
   }
 
-  return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-6">
-            <a href="/dashboard" className="text-lg font-bold tracking-tight">
-              CARIB <span className="text-emerald-600">VOICES</span>
-            </a>
-            <nav className="hidden sm:flex items-center gap-4 text-sm">
-              <a href="/dashboard" className="text-neutral-600 hover:text-neutral-900">My Voice Notes</a>
-              {user.is_reviewer && <a href="/reviewer" className="text-neutral-600 hover:text-neutral-900">Review Queue</a>}
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-medium text-neutral-900">{user.first_name} {user.last_name}</div>
-              <div className="text-xs text-neutral-500">{user.email}</div>
-            </div>
-            <button onClick={() => { logout(); router.push("/signin"); }}
-              className="rounded-full border border-neutral-200 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50">
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+  const link = (key: string, href: string, label: string) => (
+    <a href={href} className={"cv-navlink" + (active === key ? " cv-navlink-active" : "")}>
+      {label}
+    </a>
+  );
 
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {actions}
+  return (
+    <div className="flex min-h-screen flex-col bg-[color:var(--paper)]">
+      {/* Canvas wash behind the header */}
+      <div className="cv-canvas relative">
+        <div className="cv-grid absolute inset-0" aria-hidden="true" />
+
+        <header className="relative z-30 px-4 pt-5">
+          <div className="cv-navbar mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-2.5">
+            <div className="flex items-center gap-7">
+              <Logo height={42} variant="flat" />
+              <nav className="hidden items-center gap-6 md:flex">
+                {link("notes", "/dashboard", "My Voice Notes")}
+                {(user.is_reviewer || user.is_admin) && link("review", "/reviewer", "Review Queue")}
+                {user.is_admin && link("admin", "/admin", "Admin")}
+                {link("profile", "/profile", "My Profile")}
+              </nav>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <a href="/profile" className="hidden text-right sm:block">
+                <div className="text-sm font-semibold leading-tight cv-heading">
+                  {user.first_name} {user.last_name}
+                </div>
+                <div className="text-xs cv-muted">{user.email}</div>
+              </a>
+              <button
+                onClick={() => { logout(); router.push("/signin"); }}
+                className="cv-btn-ghost cv-cta px-4 py-2 text-xs"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="relative mx-auto max-w-6xl px-4 pb-6 pt-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-3xl font-bold tracking-tight cv-heading sm:text-4xl">{title}</h1>
+            {actions}
+          </div>
         </div>
-        {children}
-      </main>
+      </div>
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+
+      <SiteFooter />
     </div>
   );
 }

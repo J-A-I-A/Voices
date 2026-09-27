@@ -34,7 +34,7 @@ def test_unknown_sender_told_to_register(monkeypatch):
     assert r.status_code == 200
     assert any('register' in b.lower() for _, b in sent)
 
-def test_text_message_assigns_phrase(monkeypatch):
+def test_text_message_assigns_phrase(monkeypatch, consented_bob):
     sent = []
     import app.services.whatsapp as wasvc
     async def fake_send(num, body): sent.append((num, body)); return {}
@@ -49,7 +49,7 @@ def test_text_message_assigns_phrase(monkeypatch):
     assert u.pending_phrase_id is not None
     s.close()
 
-def test_voice_note_uploaded_and_qc_enqueued(monkeypatch):
+def test_voice_note_uploaded_and_qc_enqueued(monkeypatch, consented_bob):
     sent = []; enqueued = []
     import app.routers.whatsapp as wamod
     import app.services.whatsapp as wasvc

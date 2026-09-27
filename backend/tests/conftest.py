@@ -85,3 +85,46 @@ def db_session():
     s = Session()
     try: yield s
     finally: s.close()
+
+
+@pytest.fixture
+def consented_bob():
+    """Seeded verified user, with consent on file.
+
+    The agent now refuses to issue a phrase or accept audio until a contributor
+    has given explicit consent, so any test of the collection flow needs this.
+    """
+    from app.models.user import User
+    from app.models.consent import ConsentRecord, ConsentChannel
+    from app.config import settings as _s
+    s = Session()
+    u = s.query(User).filter(User.whatsapp_number == '+18765550001').first()
+    s.add(ConsentRecord(
+        user_id=u.id, policy_version=_s.privacy_policy_version,
+        channel=ConsentChannel.whatsapp, evidence='I AGREE', phone=u.whatsapp_number,
+    ))
+    s.commit()
+    s.close()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Clear rate-limit state between tests.
+
+    The limiter is backed by Redis, which persists across runs, so counters
+    leaked between tests and between whole suite runs — registration and
+    Google sign-in share the same `register:<ip>` bucket, and a full suite
+    would exhaust it and fail with 429s that looked like real breakage.
+    """
+    import app.services.rate_limit as rl
+    rl._mem.clear()
+    try:
+        client = rl._client()
+        if client is not None:
+            keys = list(client.scan_iter("rl:*"))
+            if keys:
+                client.delete(*keys)
+    except Exception:
+        pass  # limiter falls back to memory; nothing to clear
+    yield

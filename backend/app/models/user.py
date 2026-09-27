@@ -35,12 +35,18 @@ class User(Base):
     whatsapp_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     whatsapp_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_reviewer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     google_subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     # per-user agent session state: the phrase assigned but not yet recorded.
     pending_phrase_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_at: Mapped[_dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Set when the contributor deletes their own profile. The row survives in
+    # scrubbed form so the consent register stays intact (the Privacy Notice
+    # commits to producing it on request); every field that identifies a person
+    # is cleared, and a deleted account can no longer sign in.
+    deleted_at: Mapped[Optional[_dt.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     voice_notes: Mapped[list["VoiceNote"]] = relationship(  # type: ignore[name-defined]
         "VoiceNote",
@@ -48,6 +54,10 @@ class User(Base):
         cascade="all, delete-orphan",
         foreign_keys="VoiceNote.user_id",  # disambiguate from reviewer_id
     )
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
     @property
     def full_name(self) -> str:

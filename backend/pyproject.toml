@@ -27,6 +27,10 @@ dependencies = [
     "arq>=0.26",
     "python-multipart>=0.0.9",
     "email-validator>=2.1",
+    # Bulk phrase import from spreadsheets: openpyxl reads .xlsx, xlrd reads
+    # the legacy .xls format (xlrd 2.x dropped .xlsx, so both are needed).
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
 ]
 
 [project.optional-dependencies]

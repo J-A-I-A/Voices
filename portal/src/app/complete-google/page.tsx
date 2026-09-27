@@ -50,6 +50,10 @@ export default function CompleteGooglePage() {
         first_name: given.trim() || undefined,
         last_name: family.trim() || undefined,
       });
+      if (!res.access_token || !res.user) {
+        setError("Google sign-in could not be completed. Please try again.");
+        return;
+      }
       setToken(res.access_token);
       setUser(res.user);
       sessionStorage.removeItem("cv_google_id_token");
@@ -68,15 +72,15 @@ export default function CompleteGooglePage() {
       title="Finish your account"
       subtitle="Confirm your details and enter your date of birth."
       divider={false}
-      footer={<button onClick={() => router.push("/signin")} className="text-neutral-700 hover:underline">← Back to sign in</button>}
+      footer={<button onClick={() => router.push("/signin")} className="text-[color:var(--jaia-green)] transition hover:text-[color:var(--jaia-green)]">← Back to sign in</button>}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         {error && (
           <MotionItem>
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>
+            <div className="cv-alert">{error}</div>
           </MotionItem>
         )}
-        <p className="text-sm text-neutral-500 -mt-1">
+        <p className="-mt-1 text-sm cv-body">
           Google doesn&apos;t share your date of birth, so we collect it here to confirm you&apos;re 18 or older.
         </p>
         <MotionItem className="grid grid-cols-2 gap-3">

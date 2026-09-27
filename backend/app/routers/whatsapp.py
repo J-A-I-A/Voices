@@ -3,8 +3,11 @@
 Inbound handling:
   * verify the X-Hub-Signature-256 signature with the app secret
   * GET handshake with the verify token on subscription
+  * process each message id exactly once (the Cloud API retries deliveries)
   * only accept audio (voice) notes + text replies
   * match sender to a verified user by phone number
+  * require explicit consent (reply I AGREE) before anything is collected;
+    STOP withdraws it
   * assign a fresh active phrase on each prompt, store pending_phrase_id
   * on a voice note: fetch media, upload to S3, create a received
     VoiceNote, enqueue QC, and reply with a confirmation
@@ -16,17 +19,24 @@ import hashlib
 import hmac
 import logging
 import random
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
 from ..models.phrase import Phrase
+from ..models.processed_message import ProcessedMessage
 from ..models.user import User
 from ..models.voice_note import VoiceNote, VoiceNoteStatus
+from ..models.consent import ConsentChannel
+from ..services import consent
+from ..services.phrase_length import estimated_seconds
 from ..services import whatsapp as wa
+from ..services.whatsapp import WhatsAppError
 from ..services.rate_limit import hit_rate_limit
 from ..services.s3 import upload_bytes
 from ..workers.qc_queue import enqueue_qc
@@ -79,8 +89,79 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
             messages = value.get("messages") or []
             contacts = {c.get("wa_id"): c for c in (value.get("contacts") or [])}
             for msg in messages:
-                await _handle_message(msg, contacts.get(msg.get("from")), db)
+                # One bad message must not fail the whole delivery. Meta retries
+                # any non-2xx response and disables the subscription after
+                # repeated failures, so we always acknowledge and log instead.
+                try:
+                    if not _claim_message(db, msg):
+                        continue
+                    await _handle_message(msg, contacts.get(msg.get("from")), db)
+                except WhatsAppError as e:
+                    logger.error(
+                        "WhatsApp send failed for message %s from %s: %s",
+                        msg.get("id"), msg.get("from"), e,
+                    )
+                    db.rollback()
+                except Exception:
+                    logger.exception(
+                        "Unhandled error processing message %s from %s",
+                        msg.get("id"), msg.get("from"),
+                    )
+                    db.rollback()
     return {"status": "ok"}
+
+
+
+def _claim_message(db: Session, msg: dict) -> bool:
+    """Claim an inbound message for processing exactly once.
+
+    The Cloud API delivers at least once — an unacknowledged delivery is
+    retried with backoff, so a message can arrive many times (this is how
+    contributors ended up receiving phrases they never asked for, hours after
+    the fact, once a spell of failing sends stopped 500ing). Inserting the
+    message id first means a duplicate loses the primary-key race and is
+    skipped.
+
+    Returns True when this delivery should be processed.
+    """
+    msg_id = msg.get("id")
+    if not msg_id:
+        # Nothing to deduplicate on; process it rather than dropping it.
+        return True
+
+    if db.get(ProcessedMessage, msg_id) is not None:
+        logger.info("skipping duplicate delivery of %s", msg_id)
+        return False
+
+    try:
+        db.add(ProcessedMessage(message_id=msg_id))
+        db.commit()
+    except IntegrityError:
+        # A concurrent delivery of the same message won the race.
+        db.rollback()
+        logger.info("skipping concurrent duplicate delivery of %s", msg_id)
+        return False
+
+    if _is_stale(msg):
+        # A retry of something long past. Audio still gets processed — dropping
+        # it would lose a contribution — but re-prompting with a phrase for an
+        # old "hello" is exactly the unprompted message we want to avoid.
+        if msg.get("type") not in ("audio", "voice"):
+            logger.info("ignoring stale %s message %s", msg.get("type"), msg_id)
+            return False
+    return True
+
+
+def _is_stale(msg: dict) -> bool:
+    ts = msg.get("timestamp")
+    if not ts:
+        return False
+    try:
+        sent = int(ts)
+    except (TypeError, ValueError):
+        return False
+    age = time.time() - sent
+    return age > settings.whatsapp_stale_message_seconds
 
 
 async def _handle_message(msg: dict, contact: dict | None, db: Session) -> None:
@@ -106,9 +187,43 @@ async def _handle_message(msg: dict, contact: dict | None, db: Session) -> None:
         )
         return
 
-    if msg_type == "audio":
-        await _handle_audio(msg, user, from_number, db)
-    elif msg_type == "voice":
+    text_body = (msg.get("text") or {}).get("body")
+
+    # ── Consent gate ────────────────────────────────────────────────────
+    # The Privacy Notice states a contributor "will not be able to submit a
+    # recording until you have given this confirmation", so this sits ahead of
+    # both phrase issuing and audio intake.
+    if consent.is_withdrawal(text_body):
+        closed = consent.withdraw_consent(db, user, reason="replied STOP on WhatsApp")
+        await wa.send_text(
+            from_number,
+            "Your consent has been withdrawn and we will not collect any new recordings from you. "
+            + ("Recordings already published in the open dataset in de-identified form cannot be "
+               "recalled, as explained in our Privacy Notice. " if closed else "")
+            + "Reply I AGREE at any time if you would like to take part again.",
+        )
+        return
+
+    if not consent.has_consent(db, user):
+        if consent.is_agreement(text_body):
+            consent.record_consent(
+                db, user,
+                channel=ConsentChannel.whatsapp,
+                evidence=text_body,
+                whatsapp_message_id=msg_id,
+                phone=e164,
+            )
+            await wa.send_text(
+                from_number,
+                "Thank you — your consent has been recorded. Here comes your first phrase.",
+            )
+            await _issue_phrase(db, user, from_number)
+            return
+        # No consent yet: prompt, and accept nothing else (audio included).
+        await wa.send_text(from_number, consent.consent_prompt(settings.portal_base_url))
+        return
+
+    if msg_type in ("audio", "voice"):
         await _handle_audio(msg, user, from_number, db)
     else:
         # Anything that isn't audio -> (re)issue a phrase.
@@ -123,9 +238,11 @@ async def _issue_phrase(db: Session, user: User, from_number: str) -> None:
     phrase = random.choice(phrases)
     user.pending_phrase_id = phrase.id
     db.commit()
+    seconds = estimated_seconds(phrase.word_count)
     body = (
         f"Great, {user.first_name}! Here is your phrase.\n\n"
         f"\"{phrase.text}\"\n\n"
+        f"This one should take about {seconds:g} seconds to read. "
         f"Record yourself reading it aloud and send it back as a voice note. "
         f"Make sure you're in a quiet spot and hold the phone close. One take, please!"
     )
@@ -188,6 +305,5 @@ async def _handle_audio(msg: dict, user: User, from_number: str, db: Session) ->
     await wa.send_text(
         from_number,
         "Got it — your voice note was received and is being checked. "
-        "I'll let you know the status once quality control is done. "
         "Send any message when you'd like another phrase.",
     )

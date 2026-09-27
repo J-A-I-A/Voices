@@ -49,16 +49,28 @@ export default function RegisterPage() {
     }
   };
 
+  /**
+   * Try to sign in with Google directly. Only if the backend says it still
+   * needs a date of birth (a genuinely new account) do we send the user to
+   * the completion step — previously every sign-in went through that form,
+   * so returning users were re-asked for their name and age each time.
+   */
   const onGoogle = async (idToken: string, claims: { given_name?: string; family_name?: string }) => {
     setGoogleLoading(true);
     try {
-      // Pre-fill names from Google claims so the user can confirm; route to completion step.
+      const res = await authApi.google({ id_token: idToken });
+      if (!res.requires_completion && res.access_token && res.user) {
+        setToken(res.access_token);
+        setUser(res.user);
+        router.push("/dashboard");
+        return;
+      }
       sessionStorage.setItem("cv_google_id_token", idToken);
-      sessionStorage.setItem("cv_google_given", claims.given_name || "");
-      sessionStorage.setItem("cv_google_family", claims.family_name || "");
+      sessionStorage.setItem("cv_google_given", res.first_name || claims.given_name || "");
+      sessionStorage.setItem("cv_google_family", res.last_name || claims.family_name || "");
       router.push("/complete-google");
     } catch (e) {
-      setErrors({ form: "Google sign-in failed" });
+      setErrors({ form: e instanceof ApiError ? e.message : "Google sign-in failed" });
     } finally {
       setGoogleLoading(false);
     }
@@ -70,12 +82,12 @@ export default function RegisterPage() {
       subtitle="Join Carib Voices and help collect Jamaican speech."
       topExtra={<GoogleSignInButton label="Sign up with Google" onIdToken={onGoogle} />}
       divider
-      footer={<>Already have an account? <a href="/signin" className="font-semibold text-neutral-900 hover:underline">Log in</a></>}
+      footer={<>Already have an account? <a href="/signin" className="font-semibold text-[color:var(--jaia-green)] transition hover:text-[color:var(--jaia-green)]">Log in</a></>}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         {errors.form && (
           <MotionItem>
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{errors.form}</div>
+            <div className="cv-alert">{errors.form}</div>
           </MotionItem>
         )}
         <MotionItem className="grid grid-cols-2 gap-3">
@@ -95,8 +107,12 @@ export default function RegisterPage() {
           <SubmitButton loading={loading}>Sign Up</SubmitButton>
         </MotionItem>
         <MotionItem>
-          <p className="text-xs text-neutral-400 px-2">
-            By signing up you confirm you are 18 or older and accept the Terms and Privacy Policy.
+          <p className="px-2 text-xs leading-5 cv-muted">
+            By signing up you confirm you are 18 or older and accept our{" "}
+            <a href="/privacy" className="cv-link transition hover:text-[color:var(--jaia-green)]">
+              Privacy Notice
+            </a>
+            .
           </p>
         </MotionItem>
       </form>

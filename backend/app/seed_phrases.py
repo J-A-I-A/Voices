@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .db import SessionLocal
 from .models.phrase import Phrase
+from .services.phrase_length import count_words
 
 SEED_PHRASES = [
     "Good morning, how are you today?",
@@ -34,7 +35,8 @@ def main() -> None:
             print(f"Phrases already seeded ({existing}). Skipping.")
             return
         for text in SEED_PHRASES:
-            db.add(Phrase(text=text, locale="en-JM", active=True))
+            db.add(Phrase(text=text, locale="en-JM", active=True,
+                          word_count=count_words(text)))
         db.commit()
         print(f"Seeded {len(SEED_PHRASES)} phrases.")
     finally:

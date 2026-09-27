@@ -325,8 +325,15 @@ def _prepare_wav(src_path: str) -> str:
     return wav
 
 
-def _now_iso() -> _dt.datetime:
-    return _dt.datetime.now(_dt.timezone.utc)
+def _now_iso() -> str:
+    """ISO-8601 string, not a datetime.
+
+    The value goes into the `qc` JSONB column, and psycopg serialises that
+    with json.dumps — a raw datetime raises "Object of type datetime is not
+    JSON serializable" and aborts the whole QC run. The portal also types
+    QCMetadata.checked_at as a string.
+    """
+    return _dt.datetime.now(_dt.timezone.utc).isoformat()
 
 
 def _finalize(db: Session, note: VoiceNote, status: VoiceNoteStatus,
@@ -334,6 +341,12 @@ def _finalize(db: Session, note: VoiceNote, status: VoiceNoteStatus,
     note.status = status
     note.reject_reason = reason if status == VoiceNoteStatus.rejected else None
     note.qc = qc
+    # Mirror the measured duration onto the column the dashboard reads for its
+    # duration chip; QC only had it inside the qc payload.
+    if note.duration_seconds is None:
+        measured = qc.get("duration_seconds")
+        if isinstance(measured, (int, float)):
+            note.duration_seconds = int(round(measured))
     db.commit()
     logger.info("qc done for note %s → %s", note.id, status.value)
 

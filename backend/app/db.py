@@ -1,7 +1,8 @@
 """SQLAlchemy engine + session factory."""
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from typing import Optional
 
 from sqlalchemy import create_engine
@@ -32,7 +33,10 @@ def get_db() -> Generator[Session, None, None]:
 
 
 # Convenience for the worker (which is not a FastAPI dependency).
-def session_scope() -> Generator[Session, None, None]:
+# Must be a real context manager: the worker calls `with session_scope() as db`,
+# and a bare generator raises TypeError there, which aborted every QC run.
+@contextmanager
+def session_scope() -> Iterator[Session]:
     db = SessionLocal()
     try:
         yield db

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers import (
     auth_router, whatsapp_router, voice_notes_router,
-    reviewer_router, phrases_router,
+    reviewer_router, phrases_router, admin_router, profile_router,
 )
 
 logging.basicConfig(
@@ -36,6 +36,8 @@ app.include_router(auth_router)
 app.include_router(phrases_router)
 app.include_router(voice_notes_router)
 app.include_router(reviewer_router)
+app.include_router(admin_router)
+app.include_router(profile_router)
 app.include_router(whatsapp_router)
 
 
