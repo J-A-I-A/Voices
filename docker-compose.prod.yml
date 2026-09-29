@@ -1,0 +1,74 @@
+# Production stack for a single EC2 host:
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Postgres is AWS RDS (DATABASE_URL in .env), not a container here.
+# See deploy/AWS.md.
+name: caribvoices
+
+x-backend: &backend
+  build: ./backend
+  image: caribvoices-backend:latest
+  env_file: .env
+  restart: unless-stopped
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    # QC runs in the dedicated worker service, never inside the API process.
+    CARIB_DISABLE_INPROC_QC: "1"
+  depends_on:
+    redis:
+      condition: service_started
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env, e.g. api.yourdomain.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+
+  migrate:
+    <<: *backend
+    command: alembic upgrade head
+    restart: "no"
+
+  backend:
+    <<: *backend
+    # Trust X-Forwarded-For from Caddy (the only thing that can reach this
+    # port) so rate limits key on the real client IP, not Vercel's/Caddy's.
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips=* --workers 2
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  worker:
+    <<: *backend
+    command: python -m app.worker_main
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:

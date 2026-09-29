@@ -72,7 +72,7 @@ export default function AuthShell({
         <div className="cv-grid absolute inset-0" aria-hidden="true" />
 
         <div className="relative z-10 p-6 md:p-10">
-          <Logo height={72} />
+          <Logo height={46} variant="flat" />
         </div>
 
         <div className="relative flex flex-1 items-start justify-center p-6 pt-2 md:p-10 md:pt-0">

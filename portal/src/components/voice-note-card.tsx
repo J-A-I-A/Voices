@@ -1,8 +1,9 @@
 import { statusBadge, formatDate } from "@/lib/utils";
 import type { VoiceNoteOut } from "@/lib/types";
 
-/** A single voice-note row-card with status badge, QC signals, and inline audio. */
-export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
+/** A single voice-note row-card with status badge, QC signals, and inline audio.
+ *  `reviewerSignals` shows checks meant only for reviewers (AI-voice match). */
+export function VoiceNoteCard({ note, reviewerSignals = false }: { note: VoiceNoteOut; reviewerSignals?: boolean }) {
   const badge = statusBadge(note.status);
   const qc = note.qc;
   return (
@@ -33,6 +34,13 @@ export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
         </p>
       )}
 
+      {reviewerSignals && qc?.ai_voice_match && (
+        <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Possible AI voice: matches known synthetic voice “{qc.ai_voice_match}”
+          {qc.ai_voice_score != null && <> (similarity {qc.ai_voice_score.toFixed(2)})</>}
+        </p>
+      )}
+
       {qc && (
         <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-[color:var(--line)] pt-4 text-xs sm:grid-cols-4">
           {qc.transcript != null && (
@@ -42,11 +50,18 @@ export function VoiceNoteCard({ note }: { note: VoiceNoteOut }) {
             </div>
           )}
           {qc.wer != null && (
-            <Metric label="Match (WER)" value={(1 - qc.wer).toFixed(0) + "%"} hint={"WER " + qc.wer} />
+            <Metric label="Match (WER)" value={Math.max(0, Math.round((1 - qc.wer) * 100)) + "%"} hint={"WER " + qc.wer} />
           )}
           {qc.vad_ratio != null && <Metric label="Speech" value={Math.round(qc.vad_ratio * 100) + "%"} />}
           {qc.snr_db != null && <Metric label="SNR" value={qc.snr_db + " dB"} />}
           {qc.loudness_dbfs != null && <Metric label="Loudness" value={qc.loudness_dbfs + " dBFS"} />}
+          {reviewerSignals && qc.ai_voice_score != null && (
+            <Metric
+              label="AI-voice similarity"
+              value={qc.ai_voice_score.toFixed(2)}
+              hint={qc.ai_voice_closest ? "Closest: " + qc.ai_voice_closest : undefined}
+            />
+          )}
           {qc.qc_reason && (
             <div className="col-span-2 sm:col-span-4">
               <dt className="cv-muted">QC note</dt>

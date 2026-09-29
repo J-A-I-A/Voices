@@ -1,0 +1,62 @@
+{
+  "annakay": {
+    "voice_id": "RRIjxt3K1iKEkfsLGRXU",
+    "elevenlabs_name": "Annakay",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "damian": {
+    "voice_id": "ow5u3b7AdwE1YZU3Bpkt",
+    "elevenlabs_name": "Damian",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "denzel": {
+    "voice_id": "dhwafD61uVd8h85wAZSE",
+    "elevenlabs_name": "Denzel - Jamaican, Raspy, and Deep",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "donovan wilson": {
+    "voice_id": "GLpuYaUYNnusyOVvP3PM",
+    "elevenlabs_name": "Donovan Wilson",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "erinski": {
+    "voice_id": "TT7tPlYlWLvcEiOfrtEK",
+    "elevenlabs_name": "Erinski - Jamaican Tech Leader",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "ken tucker": {
+    "voice_id": "L3Rbw2x926dWSn7JEgHO",
+    "elevenlabs_name": "Ken Tucker",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "kevin": {
+    "voice_id": "eRcsJdPMOM0mtGC03ul7",
+    "elevenlabs_name": "Kevin - Neutral, Calm, and Clear",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "magnal": {
+    "voice_id": "Hf0cZuGYklGKWmv9iCpV",
+    "elevenlabs_name": "Magnal",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "nicole": {
+    "voice_id": "mrDMz4sYNCz18XYFpmyV",
+    "elevenlabs_name": "Nicole - Rich and Expressive",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "osmond": {
+    "voice_id": "7oYxdwScIOJFps2lOXJ0",
+    "elevenlabs_name": "Osmond - Calm Caribbean Man",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "paulette": {
+    "voice_id": "Q9Vh1SycNbxygVIup9vI",
+    "elevenlabs_name": "Paulette - Calm, Jamaican Woman",
+    "model_id": "eleven_multilingual_v2"
+  },
+  "thj": {
+    "voice_id": "RPmw5qjRTyUVwSbGoBJp",
+    "elevenlabs_name": "THJ",
+    "model_id": "eleven_multilingual_v2"
+  }
+}

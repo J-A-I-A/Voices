@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { VerifyWhatsappModal } from "@/components/verify-modal";
+import { EmailVerifyBanner } from "@/components/email-verify-banner";
 import { VoiceNoteCard } from "@/components/voice-note-card";
 import { useAuth } from "@/lib/store";
 import { voiceNotesApi, authApi, ApiError } from "@/lib/api";
@@ -38,6 +39,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, filter]);
 
+  const needsEmail = !!user && !user.email_verified;
   const needsVerify = !!user && (!user.whatsapp_verified || !user.whatsapp_number);
 
   return (
@@ -46,7 +48,12 @@ export default function DashboardPage() {
       active="notes"
       actions={
         needsVerify ? (
-          <button onClick={() => setShowVerify(true)} className="cv-btn px-5 py-2.5">
+          <button
+            onClick={() => setShowVerify(true)}
+            disabled={needsEmail}
+            title={needsEmail ? "Confirm your email address first" : undefined}
+            className="cv-btn px-5 py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             Verify WhatsApp
           </button>
         ) : (
@@ -58,7 +65,9 @@ export default function DashboardPage() {
         )
       }
     >
-      {needsVerify && (
+      {needsEmail && user && <EmailVerifyBanner email={user.email} />}
+
+      {needsVerify && !needsEmail && (
         <div className="mb-6 rounded-2xl border border-[color:var(--jaia-gold)]/40 bg-[color:var(--jaia-gold-soft)] p-4 text-sm text-[#8a5a00]">
           <p className="font-semibold text-[#6d4700]">Verify your WhatsApp number to start.</p>
           <p className="mt-1">You can&apos;t submit voice notes until your Jamaican number (876 or 658) is verified.</p>
@@ -75,7 +84,7 @@ export default function DashboardPage() {
           ["rejected", "Rejected"], ["needs_review", "Needs review"],
         ].map(([val, label]) => (
           <button key={val} onClick={() => setFilter(val)}
-            className={"rounded-full border px-3 py-1.5 transition " + (filter === val ? "border-emerald-400 bg-[color:var(--jaia-green)] font-semibold cv-heading" : "border-[color:var(--line)] bg-white cv-body hover:border-emerald-300/70 hover:bg-white/10 hover:text-white")}>
+            className={"rounded-full border px-3 py-1.5 transition " + (filter === val ? "border-emerald-400 bg-[color:var(--jaia-green)] font-semibold cv-heading" : "border-[color:var(--line)] bg-white cv-body hover:border-emerald-300/70 hover:text-[color:var(--jaia-green)]")}>
             {label}
           </button>
         ))}

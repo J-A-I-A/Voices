@@ -33,6 +33,21 @@ export function normalizeJamaican(raw: string): string {
   );
 }
 
+/**
+ * As-you-type formatting for the local part of a +1 number. Strips non-digits,
+ * drops a leading country-code "1" (Jamaican area codes never start with 1),
+ * caps at 10 digits and renders "(876) 555-1234".
+ */
+export function formatPhoneInput(raw: string): string {
+  let d = (raw ?? "").replace(/\D+/g, "");
+  if (d.startsWith("1")) d = d.slice(1);
+  d = d.slice(0, 10);
+  // Leave the first three digits bare so backspacing past ")" isn't blocked.
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 export function isJamaicanE164(v?: string | null): boolean {
   return !!v && /^\+1(?:876|658)\d{7}$/.test(v);
 }

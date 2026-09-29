@@ -4,7 +4,8 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import jose
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -14,11 +15,13 @@ from ..schemas.auth import (
     RegisterEmailRequest, GoogleAuthRequest,
     LoginRequest, TokenResponse, UserOut, VerifyWhatsappRequest,
     CheckOtpRequest, ResendOtpRequest, MeResponse, GoogleAuthResult,
+    VerifyEmailRequest,
 )
 from ..security.age import is_at_least_18
 from ..security.deps import get_current_user, get_verified_user
 from ..security.hashing import hash_password, verify_password
-from ..security.token import create_access_token
+from ..security.token import create_access_token, create_email_verify_token, decode_email_verify_token
+from ..services.email import send_verification_email, EmailError
 from ..services.google import verify_id_token, GoogleTokenError, claims_to_names
 from ..services.otp import issue_otp, verify_code, OTPError, CooldownActive
 from ..services.rate_limit import hit_rate_limit
@@ -47,6 +50,7 @@ def _user_to_out(user: User) -> UserOut:
         auth_provider=user.auth_provider.value,
         whatsapp_number=user.whatsapp_number,
         whatsapp_verified=user.whatsapp_verified,
+        email_verified=user.email_verified,
         is_reviewer=user.is_reviewer,
         is_admin=user.is_admin,
         requires_completion=not bool(user.date_of_birth),
@@ -88,7 +92,12 @@ _mark_reviewer_if_configured = _sync_configured_roles
 
 # ─── Email registration ─────────────────────────────────────
 @router.post("/register/email", response_model=TokenResponse)
-async def register_email(body: RegisterEmailRequest, request: Request, db: Session = Depends(get_db)):
+async def register_email(
+    body: RegisterEmailRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     if hit_rate_limit(f"register:{request.client.host}", 10, 600):
         raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
     if not is_at_least_18(body.date_of_birth):
@@ -105,12 +114,73 @@ async def register_email(body: RegisterEmailRequest, request: Request, db: Sessi
         email=body.email.lower(),
         auth_provider=AuthProvider.email,
         password_hash=hash_password(body.password),
+        email_verified=False,
     )
     _mark_reviewer_if_configured(user)
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Sent after the response so a slow or failing mail provider never blocks
+    # sign-up; the dashboard offers a resend.
+    background.add_task(_send_verification_logged, user.id, user.email, user.first_name)
     return _token_for(user)
+
+
+# ─── Email verification ────────────────────────────────────
+def _verification_link(user_id: str, email: str) -> str:
+    token = create_email_verify_token(user_id, email)
+    return f"{settings.portal_base_url.rstrip('/')}/verify-email?token={token}"
+
+
+async def _send_verification_logged(user_id: str, email: str, first_name: str) -> None:
+    try:
+        await send_verification_email(email, first_name, _verification_link(user_id, email))
+    except EmailError as e:
+        logger.error("verification email to %s failed: %s", email, e)
+
+
+@router.post("/email/verify", response_model=MeResponse)
+async def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
+    """Confirm an email address from the mailed link.
+
+    Unauthenticated on purpose: the link is often opened in a different
+    browser (or the phone's mail app) from the one the user signed up in.
+    """
+    invalid = HTTPException(
+        status_code=400,
+        detail="This confirmation link is invalid or has expired. Sign in and request a new one.",
+    )
+    try:
+        payload = decode_email_verify_token(body.token)
+    except jose.JWTError:
+        raise invalid
+    user = db.get(User, payload.get("sub"))
+    if not user or user.deleted_at is not None or user.email != payload.get("email"):
+        raise invalid
+    if not user.email_verified:
+        user.email_verified = True
+        db.commit()
+        db.refresh(user)
+    return _user_to_out(user)
+
+
+@router.post("/email/resend")
+async def resend_verification_email(request: Request, user: User = Depends(get_current_user)):
+    if user.email_verified:
+        return {"status": "already_verified"}
+    if hit_rate_limit(f"email_verify:{user.id}", 1, settings.email_resend_cooldown_seconds):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait {settings.email_resend_cooldown_seconds}s before requesting another email.",
+        )
+    if hit_rate_limit(f"email_verify_hr:{user.id}", 5, 3600):
+        raise HTTPException(status_code=429, detail="Too many emails requested. Try again later.")
+    try:
+        await send_verification_email(user.email, user.first_name, _verification_link(user.id, user.email))
+    except EmailError as e:
+        logger.error("verification email to %s failed: %s", user.email, e)
+        raise HTTPException(status_code=502, detail="We could not send the email. Please try again shortly.") from e
+    return {"status": "sent", "email": user.email}
 
 
 # ─── Google sign-in / sign-up ──────────────────────────────
@@ -145,6 +215,8 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
     if not email:
         raise HTTPException(status_code=400, detail="Google token did not include an email.")
     google_sub = claims.get("sub")
+    # Google reports this as a bool (occasionally the string "true").
+    google_email_verified = str(claims.get("email_verified", "")).lower() == "true"
     given, family = claims_to_names(claims)
 
     # The age gate is enforced server-side whenever a DOB is supplied.
@@ -168,6 +240,7 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
         if body.date_of_birth is None:
             if user.date_of_birth:
                 user.google_subject = google_sub
+                user.email_verified = user.email_verified or google_email_verified
                 _sync_configured_roles(user)
                 db.commit()
                 db.refresh(user)
@@ -182,6 +255,7 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
 
         # Completion step (or a deliberate update) supplied details.
         user.google_subject = google_sub
+        user.email_verified = user.email_verified or google_email_verified
         if body.first_name:
             user.first_name = body.first_name.strip()
         elif given and not user.first_name:
@@ -214,6 +288,7 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: Session = D
         auth_provider=AuthProvider.google,
         google_subject=google_sub,
         password_hash=None,
+        email_verified=google_email_verified,
     )
     _sync_configured_roles(user)
     db.add(user)
@@ -269,6 +344,11 @@ async def resend_otp(
 
 
 async def _send_otp(body, request, user, db):
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please confirm your email address first — check your inbox for the link.",
+        )
     phone = body.phone  # already normalized by Pydantic validator
     if hit_rate_limit(f"otp_req:{phone}", 5, 600):
         raise HTTPException(status_code=429, detail="Too many OTP requests for this number.")

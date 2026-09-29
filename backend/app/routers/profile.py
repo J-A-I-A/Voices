@@ -61,7 +61,8 @@ def _out(user: User) -> UserOut:
         id=user.id, first_name=user.first_name, last_name=user.last_name,
         date_of_birth=user.date_of_birth, email=user.email,
         auth_provider=user.auth_provider.value, whatsapp_number=user.whatsapp_number,
-        whatsapp_verified=user.whatsapp_verified, is_reviewer=user.is_reviewer,
+        whatsapp_verified=user.whatsapp_verified, email_verified=user.email_verified,
+        is_reviewer=user.is_reviewer,
         is_admin=user.is_admin, requires_completion=not bool(user.date_of_birth),
     )
 

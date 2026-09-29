@@ -189,8 +189,14 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm cv-muted">No number linked.</span>
-                <button onClick={() => setShowVerify(true)} className="cv-btn px-5 py-2.5">
+                <span className="text-sm cv-muted">
+                  {user.email_verified ? "No number linked." : "Confirm your email address (check your inbox) before verifying a number."}
+                </span>
+                <button
+                  onClick={() => setShowVerify(true)}
+                  disabled={!user.email_verified}
+                  className="cv-btn px-5 py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   Verify a number
                 </button>
               </div>

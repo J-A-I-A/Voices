@@ -23,11 +23,14 @@ app = FastAPI(
     description="WhatsApp voice-note collection portal + QC pipeline for Jamaican speech data.",
 )
 
-# CORS: allow the portal (and local dev servers).
+# CORS: CORS_ALLOW_ORIGINS, default "*". The portal proxies /api/* through its
+# own origin so it doesn't need CORS at all; this only matters for direct
+# browser calls. Auth is a Bearer token, not cookies, so credentials stay off —
+# browsers reject "*" combined with allow_credentials=True.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.portal_base_url, "http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

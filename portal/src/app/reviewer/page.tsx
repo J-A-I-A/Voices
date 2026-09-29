@@ -70,7 +70,7 @@ export default function ReviewerPage() {
         <div className="flex flex-col gap-4">
           {notes.map((n) => (
             <div key={n.id} className="cv-surface p-4">
-              <VoiceNoteCard note={n} />
+              <VoiceNoteCard note={n} reviewerSignals />
               <div className="mt-4 flex flex-col gap-3 border-t border-[color:var(--line)] pt-4">
                 <input
                   placeholder="Reject reason (only required if rejecting)"

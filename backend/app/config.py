@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     portal_base_url: str = "http://localhost:3000"
+    # Comma-separated browser origins allowed by CORS, or "*" for any.
+    cors_allow_origins: str = "*"
     backend_port: int = 8000
     reviewer_emails: str = ""
     # Comma-separated emails granted admin. Unlike reviewer_emails (which the
@@ -90,6 +92,14 @@ class Settings(BaseSettings):
     max_loudness_dbfs: float = -3.0
     max_clipping_ratio: float = 0.05
 
+    # Known-AI-voice check (services/voice_match.py). A note whose speaker
+    # embedding scores at or above the threshold against any reference voice
+    # is held for manual review. Empty refs dir = backend/data/ai-voices.
+    ai_voice_check_enabled: bool = True
+    ai_voice_refs_dir: str = ""
+    ai_voice_match_threshold: float = 0.55
+    speaker_model_path: str = "/opt/models/nemo_en_titanet_small.onnx"
+
     # Phrase length bands. Word thresholds are derived from these seconds and
     # the speaking rate, so tuning the rate moves every band together.
     phrase_words_per_minute: int = 150
@@ -104,6 +114,14 @@ class Settings(BaseSettings):
     otp_ttl_seconds: int = 900
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 60
+
+    # Email verification, sent through Resend (https://resend.com). With
+    # RESEND_API_KEY unset, no mail is sent and the verification link is logged
+    # instead — for local dev. EMAIL_FROM's domain must be verified in Resend.
+    resend_api_key: str = ""
+    email_from: str = "Carib Voices <noreply@notifications.jaia.org.jm>"
+    email_verification_ttl_hours: int = 24
+    email_resend_cooldown_seconds: int = 60
 
     @field_validator("agent_whatsapp_number")
     @classmethod

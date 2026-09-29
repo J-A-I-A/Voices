@@ -9,6 +9,7 @@ export interface UserOut {
   auth_provider: AuthProvider;
   whatsapp_number: string | null;
   whatsapp_verified: boolean;
+  email_verified: boolean;
   is_reviewer: boolean;
   is_admin: boolean;
   requires_completion: boolean;
@@ -43,6 +44,10 @@ export interface QCMetadata {
   qc_reason?: string | null;
   asr_model?: string | null;
   checked_at?: string | null;
+  // Known-AI-voice check; only present in reviewer responses.
+  ai_voice_score?: number | null;
+  ai_voice_closest?: string | null;
+  ai_voice_match?: string | null;
   [k: string]: unknown;
 }
 

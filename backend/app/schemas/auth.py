@@ -79,6 +79,7 @@ class UserOut(BaseModel):
     auth_provider: str
     whatsapp_number: Optional[str] = None
     whatsapp_verified: bool = False
+    email_verified: bool = False
     is_reviewer: bool = False
     is_admin: bool = False
     requires_completion: bool = False  # True for Google users needing DOB completion
@@ -131,4 +132,8 @@ class ResendOtpRequest(BaseModel):
 
 class MeResponse(UserOut):
     pass
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=2048)
 

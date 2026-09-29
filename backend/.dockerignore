@@ -1,0 +1,11 @@
+# Keep the image lean and secrets out of it. data/ stays: the AI-voice
+# reference clips in data/ai-voices are read at runtime.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+tests/
+.env
+.env.*

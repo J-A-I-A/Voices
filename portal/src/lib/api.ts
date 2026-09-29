@@ -3,7 +3,8 @@ import type {
   AdminStats, AdminUser, AdminPhrase, ConsentRecordOut, EraseResult, GoogleAuthResult, ConsentStatus, ProfileDeleteResult, PhraseImportResult, PhraseLength, PhraseLengthInfo,
 } from "./types";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+// Same-origin by default: next.config.mjs proxies /api/* to the backend.
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
 let _token: string | null = null;
 const TOKEN_KEY = "carib_token";
@@ -59,6 +60,12 @@ export const authApi = {
     request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
   me: () => request<UserOut>("/auth/me"),
+
+  verifyEmail: (token: string) =>
+    request<UserOut>("/auth/email/verify", { method: "POST", body: JSON.stringify({ token }) }),
+
+  resendVerificationEmail: () =>
+    request<{ status: "sent" | "already_verified"; email?: string }>("/auth/email/resend", { method: "POST" }),
 
   agentLink: () => request<{ agent_url: string }>("/auth/agent-link"),
 

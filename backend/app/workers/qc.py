@@ -4,8 +4,11 @@ Stage 1 — Fast structural/signal checks (no ML, milliseconds):
   decodability, duration bounds, VAD ratio, loudness & clipping, SNR, format.
 Stage 2 — Content verification (ASR + WER vs assigned phrase):
   three-way thresholds → accepted / rejected / needs_review.
+Known-AI-voice check (after Stage 1): speaker-embedding match against the
+  reference voices in data/ai-voices. A match never auto-accepts — it holds
+  the note for a reviewer.
 Stage 3 — (designed for, not built): language ID, single-speaker, duplicates,
-  synthetic/replay detection. Hooks provided below.
+  general synthetic/replay detection. Hooks provided below.
 
 All output is persisted on VoiceNote.qc.
 """
@@ -25,6 +28,7 @@ from ..db import session_scope
 from ..models.voice_note import VoiceNote, VoiceNoteStatus
 from ..services import s3 as s3_svc
 from ..services.asr import transcribe
+from ..services.voice_match import check_ai_voice
 from ..services.wer import compute_wer, normalize
 
 logger = logging.getLogger("carib.qc")
@@ -232,6 +236,15 @@ async def run_qc_for_note(voice_note_id: str) -> None:
                 )
                 return
 
+            # 1b) Known AI voices. Runs before ASR so the result is on record
+            # even if transcription fails below.
+            try:
+                qc.update(check_ai_voice(wav_path))
+            except Exception as e:
+                logger.exception("ai-voice check failed for %s: %s", note.id, e)
+                qc["ai_voice_check"] = f"error: {e}"
+            ai_match = qc.get("ai_voice_match")
+
             # 2) Stage 2 — content (ASR/WER). Only run on survivors.
             with open(wav_path, "rb") as f:
                 audio_bytes = f.read()
@@ -258,7 +271,17 @@ async def run_qc_for_note(voice_note_id: str) -> None:
                 logger.warning("stage3 hook errored (ignored): %s", e)
 
             decision = stage2["decision"]
-            if decision == "accepted":
+            if ai_match and decision != "rejected":
+                # Flag only: a reviewer confirms. A note that fails WER is
+                # rejected anyway; the match stays recorded in qc.
+                _finalize(
+                    db, note, VoiceNoteStatus.needs_review,
+                    qc={**qc, "qc_stage_failed": "ai_voice",
+                        "qc_reason": f"voice matches known AI voice '{ai_match}' "
+                                     f"(similarity {qc['ai_voice_score']})",
+                        "checked_at": _now_iso()},
+                )
+            elif decision == "accepted":
                 _finalize(db, note, VoiceNoteStatus.accepted, qc={**qc, "checked_at": _now_iso()})
             elif decision == "rejected":
                 _finalize(

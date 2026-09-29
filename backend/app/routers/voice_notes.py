@@ -28,12 +28,27 @@ def _to_out(note: VoiceNote, *, with_url: bool = True) -> VoiceNoteOut:
         mime_type=note.mime_type,
         status=note.status.value if hasattr(note.status, "value") else note.status,
         reject_reason=note.reject_reason,
-        qc=note.qc,
+        qc=contributor_qc(note.qc),
         reviewed_at=note.reviewed_at,
         reviewer_id=note.reviewer_id,
         created_at=note.created_at,
         audio_url=presigned_get_url(note.s3_key) if with_url else None,
     )
+    return out
+
+
+def contributor_qc(qc: dict | None) -> dict | None:
+    """QC as shown to the contributor: AI-voice details are reviewer-only.
+
+    Telling a contributor which reference voice they matched would show them
+    exactly which voices to avoid.
+    """
+    if not qc:
+        return qc
+    out = {k: v for k, v in qc.items() if not k.startswith("ai_voice")}
+    if out.get("qc_stage_failed") == "ai_voice":
+        out["qc_stage_failed"] = "manual_review"
+        out["qc_reason"] = "held for manual review"
     return out
 
 

@@ -32,6 +32,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
     auth_provider: Mapped[AuthProvider] = mapped_column(Enum(AuthProvider), nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Google accounts arrive verified; email sign-ups confirm via a mailed link.
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     whatsapp_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     whatsapp_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_reviewer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

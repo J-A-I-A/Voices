@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Field, SubmitButton } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 import { authApi, ApiError } from "@/lib/api";
-import { normalizeJamaican, InvalidJamaicanNumberError } from "@/lib/phone";
+import { normalizeJamaican, formatPhoneInput, InvalidJamaicanNumberError } from "@/lib/phone";
 import type { UserOut } from "@/lib/types";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -16,6 +17,19 @@ interface Props {
 
 type Step = "phone" | "code" | "done";
 
+const RESEND_COOLDOWN_S = 60;
+
+/** Pull the remaining wait out of the backend's "Please wait 42s ..." cooldown message. */
+function cooldownFromError(e: unknown): number | null {
+  if (!(e instanceof ApiError) || e.status !== 429) return null;
+  const m = /wait (\d+)s/.exec(e.message);
+  return m ? Math.max(1, Number(m[1])) : null;
+}
+
+function formatCountdown(s: number): string {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) {
   const [step, setStep] = useState<Step>("phone");
   const [phoneInput, setPhoneInput] = useState("");
@@ -24,18 +38,32 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  // Track an absolute deadline rather than decrementing a counter, so the
+  // countdown stays correct even when the tab is throttled in the background.
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const cooldown = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
+
+  const startCooldown = (seconds: number) => {
+    const t = Date.now();
+    setNow(t);
+    setCooldownUntil(t + seconds * 1000);
+  };
 
   useEffect(() => {
-    if (open && user?.whatsapp_number) setPhoneInput(user.whatsapp_number);
+    if (open && user?.whatsapp_number) setPhoneInput(formatPhoneInput(user.whatsapp_number));
     if (open) { setStep("phone"); setError(null); setCode(""); }
   }, [open, user]);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    if (cooldownUntil <= Date.now()) return;
+    const t = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      if (n >= cooldownUntil) clearInterval(t);
+    }, 250);
     return () => clearInterval(t);
-  }, [cooldown]);
+  }, [cooldownUntil]);
 
   if (!open) return null;
 
@@ -43,7 +71,7 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
     setError(null);
     let normalized: string;
     try {
-      normalized = normalizeJamaican(phoneInput);
+      normalized = normalizeJamaican("+1" + phoneInput.replace(/\D+/g, ""));
     } catch (e) {
       setError(e instanceof InvalidJamaicanNumberError ? e.message : "Invalid number");
       return;
@@ -53,8 +81,16 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
       await authApi.requestOtp(normalized);
       setPhone(normalized);
       setStep("code");
-      setCooldown(60);
+      startCooldown(RESEND_COOLDOWN_S);
     } catch (e) {
+      const wait = cooldownFromError(e);
+      if (wait) {
+        // A code for this number is still live — go to the code step and count down.
+        setPhone(normalized);
+        setStep("code");
+        startCooldown(wait);
+        return;
+      }
       setError(e instanceof ApiError ? e.message : "Could not send code");
     } finally {
       setLoading(false);
@@ -67,9 +103,11 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
     setLoading(true);
     try {
       await authApi.resendOtp(phone);
-      setCooldown(60);
+      startCooldown(RESEND_COOLDOWN_S);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not resend");
+      const wait = cooldownFromError(e);
+      if (wait) startCooldown(wait);
+      else setError(e instanceof ApiError ? e.message : "Could not resend");
     } finally {
       setLoading(false);
     }
@@ -102,7 +140,7 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
         onClick={() => { if (!loading) onClose(); }}
       >
         <motion.div
-          className="cv-surface relative w-full max-w-md rounded-[1.75rem] bg-[#06231e]/95 p-6 shadow-xl shadow-black/10 md:p-8"
+          className="cv-surface relative w-full max-w-md rounded-[1.75rem] p-6 shadow-xl shadow-black/10 md:p-8"
           initial={{ scale: 0.95, y: 10 }}
           animate={{ scale: 1, y: 0 }}
           onClick={(e) => e.stopPropagation()}
@@ -123,15 +161,31 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
                 Jamaican numbers only (area code 876 or 658). We&apos;ll text a 6-digit code to confirm it.
               </p>
               <div className="flex flex-col gap-4">
-                <Field
-                  label="WhatsApp number"
-                  name="phone"
-                  inputMode="tel"
-                  placeholder="e.g. 876 555 1234"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  error={error ?? undefined}
-                />
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="phone" className="text-sm font-medium cv-body">
+                    WhatsApp number
+                  </label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-sm font-medium text-[color:var(--ink)]">
+                      +1
+                    </span>
+                    <input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      placeholder="(876) 555-1234"
+                      maxLength={14}
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(formatPhoneInput(e.target.value))}
+                      onKeyDown={(e) => { if (e.key === "Enter") sendOtp(); }}
+                      aria-invalid={error ? true : undefined}
+                      className={cn("cv-input pl-11", error && "cv-input-error")}
+                    />
+                  </div>
+                  {error && <span className="pl-2 text-xs text-rose-600">{error}</span>}
+                </div>
                 <SubmitButton type="button" loading={loading} onClick={() => sendOtp()}>
                   Send code
                 </SubmitButton>
@@ -160,10 +214,20 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
                 <SubmitButton type="button" loading={loading} onClick={() => verify()}>
                   Verify
                 </SubmitButton>
-                <div className="flex justify-between text-xs">
-                  <button type="button" onClick={resend} disabled={cooldown > 0 || loading} className="text-[color:var(--jaia-green)] transition hover:text-[color:var(--jaia-green)] disabled:cv-muted">
-                    {cooldown > 0 ? "Resend in " + cooldown + "s" : "Resend code"}
-                  </button>
+                <button
+                  type="button"
+                  onClick={resend}
+                  disabled={cooldown > 0 || loading}
+                  aria-live="polite"
+                  className="w-full rounded-full border border-[color:var(--jaia-green)] px-6 py-3 text-sm font-medium text-[color:var(--jaia-green)] transition hover:bg-[color:var(--jaia-green)]/10 disabled:cursor-not-allowed disabled:border-[color:var(--line)] disabled:opacity-60 disabled:hover:bg-transparent"
+                >
+                  {cooldown > 0 ? (
+                    <>Resend code in <span className="tabular-nums">{formatCountdown(cooldown)}</span></>
+                  ) : (
+                    "Resend code"
+                  )}
+                </button>
+                <div className="flex justify-end text-xs">
                   <button type="button" onClick={() => { setStep("phone"); setError(null); }} className="text-[color:var(--jaia-green)] transition hover:text-[color:var(--jaia-green)]">
                     Change number
                   </button>
@@ -187,7 +251,7 @@ export function VerifyWhatsappModal({ open, user, onClose, onVerified }: Props) 
                   Message the Agent →
                 </a>
               )}
-              <button type="button" onClick={onClose} className="mt-3 text-sm cv-muted transition hover:text-white">
+              <button type="button" onClick={onClose} className="mt-3 text-sm cv-muted transition hover:text-[color:var(--ink)]">
                 Continue to dashboard
               </button>
             </div>

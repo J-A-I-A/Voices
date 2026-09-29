@@ -1,0 +1,6 @@
+# Caddy obtains and renews the Let's Encrypt certificate for API_DOMAIN
+# automatically; the DNS A record must point at this host first.
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy backend:8000
+}

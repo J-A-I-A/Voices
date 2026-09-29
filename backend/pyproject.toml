@@ -23,6 +23,8 @@ dependencies = [
     "jiwer>=3.0",
     "webrtcvad>=2.0",
     "faster-whisper>=1.0",
+    # Speaker embeddings for the known-AI-voice check (ONNX, no torch).
+    "sherpa-onnx>=1.10",
     "redis>=5.0",
     "arq>=0.26",
     "python-multipart>=0.0.9",
