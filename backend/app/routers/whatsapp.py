@@ -86,6 +86,12 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
+            # The WABA is shared with other JAIA numbers and apps, and Meta
+            # delivers every number's events to every subscribed app. Only
+            # handle messages sent to the Carib Voices number.
+            to_number = (value.get("metadata") or {}).get("phone_number_id")
+            if settings.whatsapp_phone_number_id and to_number != settings.whatsapp_phone_number_id:
+                continue
             messages = value.get("messages") or []
             contacts = {c.get("wa_id"): c for c in (value.get("contacts") or [])}
             for msg in messages:

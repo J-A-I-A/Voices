@@ -39,3 +39,6 @@ storage/
 # Misc
 .vercel
 
+
+# Claude Code personal settings
+.claude/settings.local.json
