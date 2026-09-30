@@ -96,10 +96,36 @@ def test_no_match_accepts_normally(monkeypatch, db_session):
 
 
 def test_ai_voice_match_does_not_rescue_rejected_note(monkeypatch, db_session):
+    monkeypatch.setattr(cfg.settings, "wer_auto_reject", True)
     note = _run_qc(monkeypatch, db_session, wer_decision="rejected", ai_result={
         "ai_voice_score": 0.72, "ai_voice_closest": "denzel", "ai_voice_match": "denzel"})
     assert note.status == VoiceNoteStatus.rejected
     assert note.qc["ai_voice_match"] == "denzel"
+
+
+def test_high_wer_goes_to_review_by_default(monkeypatch, db_session):
+    monkeypatch.setattr(cfg.settings, "wer_auto_reject", False)
+    note = _run_qc(monkeypatch, db_session, wer_decision="rejected", ai_result={
+        "ai_voice_score": 0.1, "ai_voice_closest": "denzel", "ai_voice_match": None})
+    assert note.status == VoiceNoteStatus.needs_review
+    assert note.reject_reason is None
+    assert note.qc["qc_stage_failed"] == "wer"
+
+
+def test_high_wer_rejects_when_auto_reject_enabled(monkeypatch, db_session):
+    monkeypatch.setattr(cfg.settings, "wer_auto_reject", True)
+    note = _run_qc(monkeypatch, db_session, wer_decision="rejected", ai_result={
+        "ai_voice_score": 0.1, "ai_voice_closest": "denzel", "ai_voice_match": None})
+    assert note.status == VoiceNoteStatus.rejected
+    assert note.reject_reason == "Recording did not match the assigned phrase."
+
+
+def test_high_wer_with_ai_voice_match_is_reviewed_as_ai_voice(monkeypatch, db_session):
+    monkeypatch.setattr(cfg.settings, "wer_auto_reject", False)
+    note = _run_qc(monkeypatch, db_session, wer_decision="rejected", ai_result={
+        "ai_voice_score": 0.72, "ai_voice_closest": "denzel", "ai_voice_match": "denzel"})
+    assert note.status == VoiceNoteStatus.needs_review
+    assert note.qc["qc_stage_failed"] == "ai_voice"
 
 
 # ── Real model on the shipped reference voices ─────────────────

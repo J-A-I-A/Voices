@@ -53,8 +53,9 @@ export default function ReviewerPage() {
   return (
     <DashboardShell title="Review Queue" active="review" actions={<button onClick={load} className="cv-btn-ghost">Refresh</button>}>
       <p className="mb-5 max-w-2xl text-sm cv-body">
-        Voice notes in the middle quality band (neither clearly accepted nor rejected automatically) land here.
-        Listen and resolve each one.
+        Voice notes the automatic checks couldn&apos;t settle land here: a partial or low match to the phrase
+        (speech recognition often mis-hears Patois), or a voice resembling a known AI voice. Listen, compare
+        with the phrase, and accept or reject each one.
       </p>
 
       {error && <div className="cv-alert mb-4">{error}</div>}

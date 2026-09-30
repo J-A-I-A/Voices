@@ -48,6 +48,8 @@ export interface QCMetadata {
   ai_voice_score?: number | null;
   ai_voice_closest?: string | null;
   ai_voice_match?: string | null;
+  // Set when an admin approves a note the automatic checks rejected.
+  admin_override?: { from_status: string; from_reason: string | null; by: string; at: string } | null;
   [k: string]: unknown;
 }
 

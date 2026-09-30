@@ -271,9 +271,10 @@ async def run_qc_for_note(voice_note_id: str) -> None:
                 logger.warning("stage3 hook errored (ignored): %s", e)
 
             decision = stage2["decision"]
-            if ai_match and decision != "rejected":
-                # Flag only: a reviewer confirms. A note that fails WER is
-                # rejected anyway; the match stays recorded in qc.
+            wer_rejects = decision == "rejected" and settings.wer_auto_reject
+            if ai_match and not wer_rejects:
+                # Flag only: a reviewer confirms. A note that WER auto-rejects
+                # is rejected anyway; the match stays recorded in qc.
                 _finalize(
                     db, note, VoiceNoteStatus.needs_review,
                     qc={**qc, "qc_stage_failed": "ai_voice",
@@ -283,11 +284,21 @@ async def run_qc_for_note(voice_note_id: str) -> None:
                 )
             elif decision == "accepted":
                 _finalize(db, note, VoiceNoteStatus.accepted, qc={**qc, "checked_at": _now_iso()})
-            elif decision == "rejected":
+            elif wer_rejects:
                 _finalize(
                     db, note, VoiceNoteStatus.rejected,
                     reason="Recording did not match the assigned phrase.",
                     qc={**qc, "qc_stage_failed": "wer", "qc_reason": "high WER",
+                        "checked_at": _now_iso()},
+                )
+            elif decision == "rejected":
+                # Low phrase match, but the audio itself passed every signal
+                # check: let a person decide rather than discard it.
+                _finalize(
+                    db, note, VoiceNoteStatus.needs_review,
+                    qc={**qc, "qc_stage_failed": "wer",
+                        "qc_reason": "low phrase match: the reader may have said something else, "
+                                     "or speech recognition mis-heard them (common with Patois)",
                         "checked_at": _now_iso()},
                 )
             else:

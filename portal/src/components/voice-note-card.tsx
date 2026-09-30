@@ -34,6 +34,13 @@ export function VoiceNoteCard({ note, reviewerSignals = false }: { note: VoiceNo
         </p>
       )}
 
+      {qc?.admin_override && note.status === "accepted" && (
+        <p className="mt-3 rounded-xl border border-[color:var(--jaia-green)]/30 bg-[color:var(--jaia-green-soft)] px-3 py-2 text-sm text-[#06502a]">
+          Approved by an admin after the automatic check rejected it
+          {qc.admin_override.from_reason ? <> ({qc.admin_override.from_reason.replace(/\.$/, "")})</> : null}.
+        </p>
+      )}
+
       {reviewerSignals && qc?.ai_voice_match && (
         <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Possible AI voice: matches known synthetic voice “{qc.ai_voice_match}”

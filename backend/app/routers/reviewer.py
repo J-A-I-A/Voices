@@ -21,7 +21,7 @@ from ..services.s3 import presigned_get_url
 router = APIRouter(prefix="/reviewer", tags=["reviewer"])
 
 
-def _to_out(note: VoiceNote) -> VoiceNoteOut:
+def voice_note_out(note: VoiceNote) -> VoiceNoteOut:
     return VoiceNoteOut(
         id=note.id,
         phrase_text=note.phrase.text if note.phrase else None,
@@ -50,7 +50,7 @@ async def review_queue(
         .order_by(VoiceNote.created_at.asc())
         .all()
     )
-    return VoiceNoteListResponse(items=[_to_out(n) for n in notes], total=len(notes))
+    return VoiceNoteListResponse(items=[voice_note_out(n) for n in notes], total=len(notes))
 
 
 @router.get("/all", response_model=VoiceNoteListResponse)
@@ -63,7 +63,7 @@ async def review_all(
     if status is not None:
         q = q.filter(VoiceNote.status == status)
     notes = q.order_by(VoiceNote.created_at.desc()).all()
-    return VoiceNoteListResponse(items=[_to_out(n) for n in notes], total=len(notes))
+    return VoiceNoteListResponse(items=[voice_note_out(n) for n in notes], total=len(notes))
 
 
 @router.post("/{note_id}/resolve", response_model=VoiceNoteOut)
@@ -91,5 +91,5 @@ async def resolve_note(
     note.qc = qc
     db.commit()
     db.refresh(note)
-    return _to_out(note)
+    return voice_note_out(note)
 

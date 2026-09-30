@@ -99,6 +99,11 @@ export const reviewerApi = {
 export const adminApi = {
   stats: () => request<AdminStats>("/admin/stats"),
 
+  rejectedNotes: () => request<VoiceNoteListResponse>("/admin/voice-notes/rejected"),
+
+  approveNote: (id: string) =>
+    request<VoiceNoteOut>("/admin/voice-notes/" + id + "/approve", { method: "POST" }),
+
   users: (q?: string) =>
     request<{ items: AdminUser[]; total: number }>(
       "/admin/users" + (q ? "?q=" + encodeURIComponent(q) : "")),

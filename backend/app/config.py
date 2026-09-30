@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     fallback_asr_model: str = "small"
     wer_accept_max: float = 0.30
     wer_reject_min: float = 0.60
+    # When false (default), a recording at or above wer_reject_min goes to the
+    # review queue instead of being rejected: ASR trained on standard English
+    # mis-hears Patois, so a high WER often means a correct reading that was
+    # transcribed badly. Signal failures (silence, clipping, noise) still reject.
+    wer_auto_reject: bool = False
     min_duration_s: float = 1.0
     max_duration_s: float = 60.0
     min_vad_ratio: float = 0.25

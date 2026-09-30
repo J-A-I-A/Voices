@@ -26,6 +26,7 @@ from ..models.consent import ConsentChannel, ConsentRecord
 from ..models.phrase import PHRASE_TEXT_MAX_CHARS, Phrase
 from ..models.user import User
 from ..models.voice_note import VoiceNote, VoiceNoteStatus
+from ..schemas.voice_note import VoiceNoteListResponse, VoiceNoteOut
 from ..security.deps import get_admin
 from ..services import consent as consent_svc
 from ..services.phrase_import import PhraseImportError, parse_phrase_file
@@ -34,6 +35,7 @@ from ..services.phrase_length import (
     exceeds_maximum, thresholds, word_range_for,
 )
 from ..services.s3 import delete_key
+from .reviewer import voice_note_out
 
 # Generous for a phrase list, small enough to reject a stray upload.
 MAX_IMPORT_BYTES = 5 * 1024 * 1024
@@ -578,6 +580,58 @@ async def erase_user_data(
         note=("Account retained so the consent register stays auditable. Recordings already "
               "published in a released open dataset cannot be recalled."),
     )
+
+
+# ─── Rejected voice notes ───────────────────────────────────────────────
+# Automatic QC rejects on a word-error-rate threshold, and ASR models trained
+# mostly on standard English mis-hear Patois, so correct recordings can be
+# rejected. Admins listen to rejected notes here and approve the good ones.
+@router.get("/voice-notes/rejected", response_model=VoiceNoteListResponse)
+async def list_rejected_notes(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    notes = (
+        db.query(VoiceNote)
+        .filter(VoiceNote.status == VoiceNoteStatus.rejected)
+        .order_by(VoiceNote.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    total = db.query(func.count(VoiceNote.id)).filter(VoiceNote.status == VoiceNoteStatus.rejected).scalar()
+    return VoiceNoteListResponse(items=[voice_note_out(n) for n in notes], total=total or 0)
+
+
+@router.post("/voice-notes/{note_id}/approve", response_model=VoiceNoteOut)
+async def approve_rejected_note(
+    note_id: str,
+    admin: User = Depends(get_admin),
+    db: Session = Depends(get_db),
+):
+    note = db.get(VoiceNote, note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Voice note not found.")
+    if note.status != VoiceNoteStatus.rejected:
+        raise HTTPException(status_code=409, detail="Only rejected voice notes can be approved here.")
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    qc = dict(note.qc or {})
+    # Keep the original verdict so the override is auditable.
+    qc["admin_override"] = {
+        "from_status": "rejected",
+        "from_reason": note.reject_reason,
+        "by": admin.id,
+        "at": now.isoformat(),
+    }
+    note.qc = qc
+    note.status = VoiceNoteStatus.accepted
+    note.reject_reason = None
+    note.reviewed_at = now
+    note.reviewer_id = admin.id
+    db.commit()
+    db.refresh(note)
+    logger.info("admin %s approved rejected voice note %s", admin.id, note.id)
+    return voice_note_out(note)
 
 
 # ─── Dataset export ─────────────────────────────────────────────────────

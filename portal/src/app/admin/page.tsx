@@ -3,18 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { VoiceNoteCard } from "@/components/voice-note-card";
 import { useAuth } from "@/lib/store";
 import { adminApi, ApiError } from "@/lib/api";
 import type { AdminStats, AdminUser, AdminPhrase, ConsentRecordOut, PhraseImportResult,
-  PhraseLength, PhraseLengthInfo } from "@/lib/types";
+  PhraseLength, PhraseLengthInfo, VoiceNoteOut } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
-type Tab = "overview" | "users" | "phrases" | "consent" | "export";
+type Tab = "overview" | "users" | "phrases" | "rejected" | "consent" | "export";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "users", label: "Users" },
   { id: "phrases", label: "Phrase bank" },
+  { id: "rejected", label: "Rejected notes" },
   { id: "consent", label: "Consent" },
   { id: "export", label: "Export" },
 ];
@@ -114,6 +116,8 @@ export default function AdminPage() {
   const [lengthFilter, setLengthFilter] = useState<PhraseLength | "">("");
   const [lengths, setLengths] = useState<PhraseLengthInfo | null>(null);
   const [consents, setConsents] = useState<ConsentRecordOut[]>([]);
+  const [rejected, setRejected] = useState<VoiceNoteOut[]>([]);
+  const [rejectedTotal, setRejectedTotal] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
 
   // Admins only. Reviewers get bounced to their own queue.
@@ -149,6 +153,11 @@ export default function AdminPage() {
       setLengths(info);
     });
     if (which === "consent") return guard(async () => setConsents((await adminApi.consents()).items));
+    if (which === "rejected") return guard(async () => {
+      const res = await adminApi.rejectedNotes();
+      setRejected(res.items);
+      setRejectedTotal(res.total);
+    });
     return Promise.resolve();
   }, [guard, userQuery, phraseQuery, lengthFilter]);
 
@@ -188,6 +197,47 @@ export default function AdminPage() {
       {notice && (
         <div className="mb-4 rounded-2xl border border-[color:var(--jaia-green)]/30 bg-[color:var(--jaia-green-soft)] px-4 py-3 text-sm cv-body">
           {notice}
+        </div>
+      )}
+
+      {/* ─── Rejected notes ───────────────────────────────── */}
+      {tab === "rejected" && (
+        <div className="flex flex-col gap-4">
+          <p className="max-w-3xl text-sm cv-body">
+            Recordings the automatic checks rejected. Speech recognition often mis-hears Patois, so a
+            correct reading can fail the phrase match. Listen to each one and approve it if the speaker
+            read the phrase clearly. Approved notes count as accepted and are included in the dataset export.
+          </p>
+          {rejected.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-white p-10 text-center cv-muted">
+              <p className="font-semibold cv-heading">No rejected voice notes</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs cv-muted">
+                Showing {rejected.length} of {rejectedTotal}, newest first.
+              </p>
+              {rejected.map((n) => (
+                <div key={n.id} className="flex flex-col gap-3">
+                  <VoiceNoteCard note={n} reviewerSignals />
+                  <div className="-mt-1 flex justify-end">
+                    <button
+                      disabled={busy === "approve:" + n.id}
+                      onClick={() => guard(async () => {
+                        await adminApi.approveNote(n.id);
+                        setRejected((rows) => rows.filter((r) => r.id !== n.id));
+                        setRejectedTotal((t) => Math.max(0, t - 1));
+                        setNotice("Voice note approved and marked accepted.");
+                      }, "approve:" + n.id)}
+                      className="cv-btn px-5 py-2"
+                    >
+                      {busy === "approve:" + n.id ? "Approving…" : "Approve"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 
